@@ -44,12 +44,28 @@ function JoinedChallengeCard({
     const userCompletedDays = progressData.userProgress.filter(p => p.completed).length;
     const userProgressPercentage = Math.round((userCompletedDays / challenge.duration) * 100);
 
-    // Calculate average progress of all participants
-    const allParticipants = [...new Set(progressData.allProgress.map(p => p.user_id))];
-    const avgCompletedDays = allParticipants.length > 0
-        ? progressData.allProgress.filter(p => p.completed).length / allParticipants.length
+    // Calculate real participant count and average progress
+    const uniqueParticipants = [...new Set(progressData.allProgress.map(p => p.user_id))];
+    const realParticipantCount = Math.max(uniqueParticipants.length, challenge.participants, 1);
+
+    const totalCompletedDays = progressData.allProgress.filter(p => p.completed).length;
+    const totalPossibleDays = realParticipantCount * challenge.duration;
+    const avgProgressPercentage = totalPossibleDays > 0
+        ? Math.round((totalCompletedDays / totalPossibleDays) * 100)
         : 0;
-    const avgProgressPercentage = Math.round((avgCompletedDays / challenge.duration) * 100);
+
+    // Debug logs
+    console.log(`Challenge: ${challenge.name}`);
+    console.log(`Challenge.participants: ${challenge.participants}`);
+    console.log(`Unique participants from progress: ${uniqueParticipants.length}`);
+    console.log(`Real participant count: ${realParticipantCount}`);
+    console.log(`Duration: ${challenge.duration} days`);
+    console.log(`User completed days: ${userCompletedDays}/${challenge.duration} (${userProgressPercentage}%)`);
+    console.log(`Total completed days by all: ${totalCompletedDays}`);
+    console.log(`Total possible days: ${totalPossibleDays}`);
+    console.log(`Average progress: ${avgProgressPercentage}%`);
+    console.log('All progress entries:', progressData.allProgress);
+    console.log('Unique participants:', uniqueParticipants);
 
     const renderProgressDays = () => {
         const days = [];
@@ -126,7 +142,7 @@ function JoinedChallengeCard({
                             </div>
                             <div className="flex items-center gap-1">
                                 <Users className="w-4 h-4" />
-                                <span>{allParticipants.length} participantes</span>
+                                <span>{realParticipantCount} participantes</span>
                             </div>
                         </div>
                     </div>
@@ -149,7 +165,7 @@ function JoinedChallengeCard({
                 <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 text-center">
                     <div className="text-2xl font-bold text-blue-800">{avgProgressPercentage}%</div>
                     <div className="text-sm text-blue-600">Promedio grupal</div>
-                    <div className="text-xs text-blue-500">{Math.round(avgCompletedDays)}/{challenge.duration} días</div>
+                    <div className="text-xs text-blue-500">{realParticipantCount} participantes</div>
                 </div>
             </div>
 
@@ -225,7 +241,7 @@ export default function JoinedChallenges() {
                 } catch (progressError: any) {
                     console.error(`Error loading progress for challenge ${challenge.id}:`, progressError);
                     // Return empty progress instead of throwing
-                    return { challengeId: challenge.id, progress: { userProgress: [], allProgress: [] } };
+                    return { challengeId: challenge.id, progress: { userProgress: [], allProgress: [], allParticipants: [] } };
                 }
             });
 

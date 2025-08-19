@@ -33,38 +33,65 @@ export function useChallenges() {
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Helper function to get real participant count from challenge_participants table
+  const getRealParticipantCount = useCallback(async (challengeId: string): Promise<number> => {
+    if (isAnonymous) {
+      return 1; // For anonymous users, always return 1
+    }
+    
+    const { count, error } = await supabase
+      .from('challenge_participants')
+      .select('*', { count: 'exact', head: true })
+      .eq('challenge_id', challengeId);
+    
+    if (error) {
+      console.error('Error getting participant count:', error);
+      return 1; // Fallback to 1 if error
+    }
+    
+    return Math.max(count || 0, 1); // At least 1 (the creator)
+  }, [isAnonymous]);
+
   // Load challenges from correct source
   useEffect(() => {
-    setLoading(true);
-    if (isAnonymous) {
-      setChallenges(getLocalChallenges());
-      setLoading(false);
-    } else {
-      supabase
-        .from('challenges')
-        .select('*')
-        .eq('created_by', user?.id)
-        .then(({ data, error }) => {
-          if (error) {
-            setChallenges([]);
-          } else {
-            // Map database response to frontend format
-            const mappedChallenges = (data || []).map(dbChallenge => ({
-              id: dbChallenge.id,
-              name: dbChallenge.name,
-              duration: dbChallenge.duration,
-              type: dbChallenge.type,
-              emoji: dbChallenge.emoji,
-              participants: dbChallenge.participants,
-              createdAt: dbChallenge.created_at,
-              progress: [] // Will be loaded separately if needed
-            }));
-            setChallenges(mappedChallenges);
-          }
-          setLoading(false);
-        });
-    }
-  }, [user, isAnonymous]);
+    const loadChallenges = async () => {
+      setLoading(true);
+      if (isAnonymous) {
+        setChallenges(getLocalChallenges());
+        setLoading(false);
+      } else {
+        const { data, error } = await supabase
+          .from('challenges')
+          .select('*')
+          .eq('created_by', user?.id);
+          
+        if (error) {
+          setChallenges([]);
+        } else {
+          // Map database response and add real participant counts
+          const challengesWithRealCounts = await Promise.all(
+            (data || []).map(async (dbChallenge) => {
+              const realParticipantCount = await getRealParticipantCount(dbChallenge.id);
+              return {
+                id: dbChallenge.id,
+                name: dbChallenge.name,
+                duration: dbChallenge.duration,
+                type: dbChallenge.type,
+                emoji: dbChallenge.emoji,
+                participants: realParticipantCount,
+                createdAt: dbChallenge.created_at,
+                progress: [] // Will be loaded separately if needed
+              };
+            })
+          );
+          setChallenges(challengesWithRealCounts);
+        }
+        setLoading(false);
+      }
+    };
+    
+    loadChallenges();
+  }, [user, isAnonymous, getRealParticipantCount]);
 
   // Create challenge
   const createChallenge = useCallback(async (challenge: Challenge) => {
@@ -102,6 +129,19 @@ export function useChallenges() {
         .single();
       if (error) throw error;
       
+      // Add creator as the first participant
+      const { error: participantError } = await supabase
+        .from('challenge_participants')
+        .insert([{
+          challenge_id: data.id,
+          user_id: user?.id
+        }]);
+      
+      if (participantError) {
+        console.error('Error adding creator as participant:', participantError);
+        // Don't throw here, challenge was created successfully
+      }
+      
       // Map database response back to frontend format
       const frontendChallenge = {
         id: data.id,
@@ -109,7 +149,7 @@ export function useChallenges() {
         duration: data.duration,
         type: data.type,
         emoji: data.emoji,
-        participants: data.participants,
+        participants: 1, // Creator is the first participant
         createdAt: data.created_at,
         progress: [],
         isPublic: data.is_public,
@@ -232,24 +272,27 @@ export function useChallenges() {
       throw error;
     }
     
-    const mappedChallenges = (data || []).map(dbChallenge => ({
-      id: dbChallenge.id,
-      name: dbChallenge.name,
-      duration: dbChallenge.duration,
-      type: dbChallenge.type,
-      emoji: dbChallenge.emoji,
-      participants: dbChallenge.participants || 1,
-      createdAt: dbChallenge.created_at,
-      progress: [],
-      isPublic: dbChallenge.is_public,
-      shareCode: dbChallenge.share_code,
-      createdBy: dbChallenge.created_by,
-      participantIds: []
+    const mappedChallenges = await Promise.all((data || []).map(async (dbChallenge) => {
+      const realParticipantCount = await getRealParticipantCount(dbChallenge.id);
+      return {
+        id: dbChallenge.id,
+        name: dbChallenge.name,
+        duration: dbChallenge.duration,
+        type: dbChallenge.type,
+        emoji: dbChallenge.emoji,
+        participants: realParticipantCount,
+        createdAt: dbChallenge.created_at,
+        progress: [],
+        isPublic: dbChallenge.is_public,
+        shareCode: dbChallenge.share_code,
+        createdBy: dbChallenge.created_by,
+        participantIds: []
+      };
     }));
     
     console.log('Mapped public challenges:', mappedChallenges);
     return mappedChallenges;
-  }, [isAnonymous, user?.id]);
+  }, [isAnonymous, user?.id, getRealParticipantCount]);
 
   // Join public challenge by share code
   const joinChallengeByCode = useCallback(async (shareCode: string) => {
@@ -285,13 +328,16 @@ export function useChallenges() {
     
     if (participationError) throw participationError;
     
+    // Get updated participant count
+    const realParticipantCount = await getRealParticipantCount(data.id);
+    
     return {
       id: data.id,
       name: data.name,
       duration: data.duration,
       type: data.type,
       emoji: data.emoji,
-      participants: data.participants,
+      participants: realParticipantCount,
       createdAt: data.created_at,
       progress: [],
       isPublic: data.is_public,
@@ -299,7 +345,7 @@ export function useChallenges() {
       createdBy: data.created_by,
       participantIds: []
     };
-  }, [isAnonymous, user?.id]);
+  }, [isAnonymous, user?.id, getRealParticipantCount]);
 
   // Join public challenge directly
   const joinPublicChallenge = useCallback(async (challengeId: string) => {
@@ -344,7 +390,7 @@ export function useChallenges() {
         .select(`
           challenge_id,
           joined_at,
-          challenges!inner(*)
+          challenges(*)
         `)
         .eq('user_id', user?.id);
       
@@ -353,26 +399,30 @@ export function useChallenges() {
         throw error;
       }
       
-      return (data || []).map(participation => ({
-        id: participation.challenges.id,
-        name: participation.challenges.name,
-        duration: participation.challenges.duration,
-        type: participation.challenges.type,
-        emoji: participation.challenges.emoji,
-        participants: participation.challenges.participants,
-        createdAt: participation.challenges.created_at,
-        progress: [],
-        isPublic: participation.challenges.is_public,
-        shareCode: participation.challenges.share_code,
-        createdBy: participation.challenges.created_by,
-        participantIds: [],
-        joinedAt: participation.joined_at
+      return await Promise.all((data || []).map(async (participation) => {
+        const challenge = Array.isArray(participation.challenges) ? participation.challenges[0] : participation.challenges;
+        const realParticipantCount = await getRealParticipantCount(participation.challenge_id);
+        return {
+          id: challenge.id,
+          name: challenge.name,
+          duration: challenge.duration,
+          type: challenge.type,
+          emoji: challenge.emoji,
+          participants: realParticipantCount,
+          createdAt: challenge.created_at,
+          progress: [],
+          isPublic: challenge.is_public,
+          shareCode: challenge.share_code,
+          createdBy: challenge.created_by,
+          participantIds: [],
+          joinedAt: participation.joined_at
+        };
       }));
     } catch (error: any) {
       console.error('Unexpected error in getJoinedChallenges:', error);
       throw error;
     }
-  }, [isAnonymous, user?.id]);
+  }, [isAnonymous, user?.id, getRealParticipantCount]);
 
   // Get challenge progress for joined challenges
   const getChallengeProgress = useCallback(async (challengeId: string) => {
@@ -389,25 +439,27 @@ export function useChallenges() {
       
       if (userError) {
         console.error('Error fetching user progress:', userError);
-        // Don't throw, just return empty progress
         return { userProgress: [], allProgress: [] };
       }
       
       // Get all participants' progress for comparison
       const { data: allProgress, error: allError } = await supabase
         .from('progress_entries')
-        .select(`
-          *,
-          challenge_participants!inner(user_id)
-        `)
+        .select('*')
         .eq('challenge_id', challengeId)
         .order('day_number');
       
       if (allError) {
         console.error('Error fetching all progress:', allError);
-        // Return user progress but empty all progress
         return { userProgress: userProgress || [], allProgress: [] };
       }
+      
+      console.log('getChallengeProgress result:', {
+        challengeId,
+        userProgress: userProgress?.length || 0,
+        allProgress: allProgress?.length || 0,
+        uniqueUsers: [...new Set(allProgress?.map(p => p.user_id) || [])]
+      });
       
       return {
         userProgress: userProgress || [],

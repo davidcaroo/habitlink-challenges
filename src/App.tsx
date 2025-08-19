@@ -14,6 +14,7 @@ import MobileMenuButton from './components/MobileMenuButton';
 import AuthModal from './components/AuthModal';
 import ShareChallengeModal from './components/ShareChallengeModal';
 import AnimatedBackground from './components/AnimatedBackground';
+import EmailVerification from './components/EmailVerification';
 import { AuthProvider, useAuthContext } from './contexts/AuthContext';
 import { useChallenges } from './hooks/useChallenges';
 
@@ -25,16 +26,24 @@ function AppContent() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  const { user, signOut } = useAuthContext();
+  const { user, signOut, isEmailVerified } = useAuthContext();
   const { challenges, createChallenge, updateChallenge } = useChallenges();
 
   // Detectar cuando el usuario se loguea y cambiar automáticamente al dashboard
   useEffect(() => {
-    if (user && currentView === 'landing') {
+    if (user && isEmailVerified && currentView === 'landing') {
       setCurrentView('dashboard');
       setShowAuthModal(false);
     }
-  }, [user, currentView]);
+  }, [user, isEmailVerified, currentView]);
+
+  // Redirigir a landing si el usuario no está verificado y está en una página protegida
+  useEffect(() => {
+    if (user && !isEmailVerified && currentView !== 'landing') {
+      // Solo necesitamos mostrar la pantalla de verificación, no cambiar la vista
+      // La lógica de renderizado ya maneja esto
+    }
+  }, [user, isEmailVerified, currentView]);
 
   const handleLogin = () => setShowAuthModal(true);
   const handleLogout = async () => {
@@ -51,7 +60,7 @@ function AppContent() {
     }
   };
   const handleBackToLanding = () => {
-    setCurrentView(user ? 'dashboard' : 'landing');
+    setCurrentView((user && isEmailVerified) ? 'dashboard' : 'landing');
     setCurrentChallenge(null);
   };
   const toggleMobileSidebar = () => {
@@ -70,7 +79,7 @@ function AppContent() {
         duration: challengeData.duration,
         type: challengeData.type,
         emoji: challengeData.emoji,
-        participants: challengeData.type === 'individual' ? 1 : Math.floor(Math.random() * 20) + 1,
+        participants: 1, // Always start with 1 participant (the creator)
         progress: [],
         createdAt: new Date().toISOString(),
       };
@@ -123,8 +132,13 @@ function AppContent() {
         />
       )}
 
+      {/* Email Verification Required - For logged in but unverified users */}
+      {user && !isEmailVerified && (
+        <EmailVerification />
+      )}
+
       {/* Authenticated Views - With sidebar */}
-      {user && currentView !== 'landing' && (
+      {user && isEmailVerified && currentView !== 'landing' && (
         <div className="flex h-screen bg-gradient-to-br from-green-50 to-emerald-50 overflow-hidden">
           <AnimatedBackground />
 
