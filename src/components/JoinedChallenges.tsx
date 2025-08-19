@@ -53,27 +53,55 @@ function JoinedChallengeCard({
 
     const renderProgressDays = () => {
         const days = [];
+        const today = new Date();
+
+        // Fechas importantes
+        const challengeStartDate = new Date(challenge.createdAt);
+        const userJoinedDate = challenge.joinedAt ? new Date(challenge.joinedAt) : challengeStartDate;
+
+        // Calcular en qué día del reto nos encontramos hoy
+        const daysSinceChallengeStart = Math.floor((today.getTime() - challengeStartDate.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+
+        // Calcular desde qué día del reto el usuario puede participar
+        const dayUserStartedParticipating = Math.floor((userJoinedDate.getTime() - challengeStartDate.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+
         for (let day = 1; day <= challenge.duration; day++) {
             const userDayProgress = progressData.userProgress.find(p => p.day_number === day);
             const isCompleted = userDayProgress?.completed || false;
-            const isPastDay = day <= Math.ceil((currentDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000));
+
+            // Un día está disponible si:
+            // 1. El usuario ya se había unido cuando llegó ese día (day >= dayUserStartedParticipating)
+            // 2. Ese día ya ha llegado o es hoy (day <= daysSinceChallengeStart)
+            // 3. El reto aún está activo o ese día específico ya pasó
+            const isAvailable = day >= dayUserStartedParticipating && day <= daysSinceChallengeStart && daysSinceChallengeStart > 0;
+
+            // Estados para mostrar información clara
+            const isPastUserDay = day < dayUserStartedParticipating;
+            const isFutureDay = day > daysSinceChallengeStart;
 
             days.push(
                 <button
                     key={day}
                     onClick={() => {
-                        if (isPastDay || day === Math.ceil((currentDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000)) + 1) {
+                        if (isAvailable) {
                             onMarkProgress(challenge.id, day, !isCompleted);
                         }
                     }}
-                    disabled={!isPastDay && day > Math.ceil((currentDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000)) + 1}
+                    disabled={!isAvailable}
+                    title={
+                        isCompleted ? `Día ${day} completado` :
+                            isPastUserDay ? `Día ${day} - No participabas aún` :
+                                isFutureDay ? `Día ${day} - Disponible el ${new Date(challengeStartDate.getTime() + (day - 1) * 24 * 60 * 60 * 1000).toLocaleDateString()}` :
+                                    isAvailable ? `Marcar día ${day}` :
+                                        `Día ${day} no disponible`
+                    }
                     className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${isCompleted
-                        ? 'bg-green-500 text-white shadow-md'
-                        : isPastDay
-                            ? 'bg-red-100 text-red-600 border-2 border-red-200 hover:bg-red-200'
-                            : day === Math.ceil((currentDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000)) + 1
-                                ? 'bg-blue-100 text-blue-600 border-2 border-blue-300 hover:bg-blue-200'
-                                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        ? 'bg-green-500 text-white shadow-md hover:bg-green-600'
+                        : isAvailable
+                            ? 'bg-blue-100 text-blue-600 border-2 border-blue-300 hover:bg-blue-200 cursor-pointer'
+                            : isPastUserDay
+                                ? 'bg-gray-200 text-gray-500 cursor-not-allowed opacity-60'
+                                : 'bg-yellow-100 text-yellow-600 cursor-not-allowed opacity-60'
                         }`}
                 >
                     {day}
