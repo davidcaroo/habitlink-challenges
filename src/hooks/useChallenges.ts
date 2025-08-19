@@ -194,27 +194,51 @@ export function useChallenges() {
 
   // Get public challenges
   const getPublicChallenges = useCallback(async () => {
-    if (isAnonymous) return [];
+    if (isAnonymous) {
+      console.log('User is anonymous, returning empty array');
+      return [];
+    }
     
+    console.log('Fetching public challenges for user:', user?.id);
+    
+    // First, let's test basic connectivity
+    const { data: testData, error: testError } = await supabase
+      .from('challenges')
+      .select('count', { count: 'exact' });
+    
+    console.log('Total challenges count test:', { testData, testError });
+    
+    // Now try to get all public challenges without user filter first
+    const { data: allPublic, error: allError } = await supabase
+      .from('challenges')
+      .select('*')
+      .eq('is_public', true)
+      .eq('type', 'grupal');
+      
+    console.log('All public challenges:', { allPublic, allError });
+    
+    // Now try with user filter
     const { data, error } = await supabase
       .from('challenges')
-      .select(`
-        *,
-        profiles:created_by(id, email)
-      `)
+      .select('*')
       .eq('is_public', true)
       .eq('type', 'grupal')
       .neq('created_by', user?.id); // Exclude own challenges
     
-    if (error) throw error;
+    console.log('Public challenges query result:', { data, error, userId: user?.id });
     
-    return (data || []).map(dbChallenge => ({
+    if (error) {
+      console.error('Error fetching public challenges:', error);
+      throw error;
+    }
+    
+    const mappedChallenges = (data || []).map(dbChallenge => ({
       id: dbChallenge.id,
       name: dbChallenge.name,
       duration: dbChallenge.duration,
       type: dbChallenge.type,
       emoji: dbChallenge.emoji,
-      participants: dbChallenge.participants,
+      participants: dbChallenge.participants || 1,
       createdAt: dbChallenge.created_at,
       progress: [],
       isPublic: dbChallenge.is_public,
@@ -222,6 +246,9 @@ export function useChallenges() {
       createdBy: dbChallenge.created_by,
       participantIds: []
     }));
+    
+    console.log('Mapped public challenges:', mappedChallenges);
+    return mappedChallenges;
   }, [isAnonymous, user?.id]);
 
   // Join public challenge by share code
@@ -278,13 +305,17 @@ export function useChallenges() {
   const joinPublicChallenge = useCallback(async (challengeId: string) => {
     if (isAnonymous) throw new Error('Debes estar logueado para unirte a retos públicos');
     
+    console.log('Attempting to join challenge:', challengeId, 'with user:', user?.id);
+    
     // Check if user is already participating
-    const { data: existingParticipation } = await supabase
+    const { data: existingParticipation, error: checkError } = await supabase
       .from('challenge_participants')
       .select('id')
       .eq('challenge_id', challengeId)
       .eq('user_id', user?.id)
       .single();
+    
+    console.log('Existing participation check:', { existingParticipation, checkError });
     
     if (existingParticipation) throw new Error('Ya estás participando en este reto');
     
@@ -297,8 +328,117 @@ export function useChallenges() {
         joined_at: new Date().toISOString()
       });
     
+    console.log('Join challenge result:', { error });
+    
     if (error) throw error;
     return true;
+  }, [isAnonymous, user?.id]);
+
+  // Get challenges where user participates (joined challenges)
+  const getJoinedChallenges = useCallback(async () => {
+    if (isAnonymous) return [];
+    
+    try {
+      const { data, error } = await supabase
+        .from('challenge_participants')
+        .select(`
+          challenge_id,
+          joined_at,
+          challenges!inner(*)
+        `)
+        .eq('user_id', user?.id);
+      
+      if (error) {
+        console.error('Error fetching joined challenges:', error);
+        throw error;
+      }
+      
+      return (data || []).map(participation => ({
+        id: participation.challenges.id,
+        name: participation.challenges.name,
+        duration: participation.challenges.duration,
+        type: participation.challenges.type,
+        emoji: participation.challenges.emoji,
+        participants: participation.challenges.participants,
+        createdAt: participation.challenges.created_at,
+        progress: [],
+        isPublic: participation.challenges.is_public,
+        shareCode: participation.challenges.share_code,
+        createdBy: participation.challenges.created_by,
+        participantIds: [],
+        joinedAt: participation.joined_at
+      }));
+    } catch (error: any) {
+      console.error('Unexpected error in getJoinedChallenges:', error);
+      throw error;
+    }
+  }, [isAnonymous, user?.id]);
+
+  // Get challenge progress for joined challenges
+  const getChallengeProgress = useCallback(async (challengeId: string) => {
+    if (isAnonymous) return { userProgress: [], allProgress: [] };
+    
+    try {
+      // Get user's progress
+      const { data: userProgress, error: userError } = await supabase
+        .from('progress_entries')
+        .select('*')
+        .eq('challenge_id', challengeId)
+        .eq('user_id', user?.id)
+        .order('day_number');
+      
+      if (userError) {
+        console.error('Error fetching user progress:', userError);
+        // Don't throw, just return empty progress
+        return { userProgress: [], allProgress: [] };
+      }
+      
+      // Get all participants' progress for comparison
+      const { data: allProgress, error: allError } = await supabase
+        .from('progress_entries')
+        .select(`
+          *,
+          challenge_participants!inner(user_id)
+        `)
+        .eq('challenge_id', challengeId)
+        .order('day_number');
+      
+      if (allError) {
+        console.error('Error fetching all progress:', allError);
+        // Return user progress but empty all progress
+        return { userProgress: userProgress || [], allProgress: [] };
+      }
+      
+      return {
+        userProgress: userProgress || [],
+        allProgress: allProgress || []
+      };
+    } catch (error: any) {
+      console.error('Unexpected error in getChallengeProgress:', error);
+      return { userProgress: [], allProgress: [] };
+    }
+  }, [isAnonymous, user?.id]);
+
+  // Mark progress for a joined challenge
+  const markChallengeProgress = useCallback(async (challengeId: string, dayNumber: number, completed: boolean) => {
+    if (isAnonymous) throw new Error('Debes estar logueado para marcar progreso');
+    
+    const { data, error } = await supabase
+      .from('progress_entries')
+      .upsert({
+        challenge_id: challengeId,
+        user_id: user?.id,
+        day_number: dayNumber,
+        completed,
+        completed_at: new Date().toISOString()
+      }, {
+        onConflict: 'challenge_id,user_id,day_number'
+      })
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
   }, [isAnonymous, user?.id]);
 
   return {
@@ -310,6 +450,9 @@ export function useChallenges() {
     migrateToSupabase,
     getPublicChallenges,
     joinChallengeByCode,
-    joinPublicChallenge
+    joinPublicChallenge,
+    getJoinedChallenges,
+    getChallengeProgress,
+    markChallengeProgress
   };
 }

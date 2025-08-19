@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Target, Trophy, Calendar, TrendingUp, Plus, LogOut, User } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Target, Trophy, Calendar, TrendingUp, Plus, LogOut, User, Users } from 'lucide-react';
 import { useProgress } from '../hooks/useProgress';
 
 interface User {
@@ -24,6 +24,7 @@ interface DashboardProps {
   challenges: Challenge[];
   onCreateChallenge: () => void;
   onViewChallenge: (challengeId: string) => void;
+  onViewJoinedChallenges: () => void;
   onLogout: () => void;
 }
 
@@ -39,6 +40,7 @@ function ChallengeStats({ challenge, onStatsUpdate }: {
     const isActive = completedDays > 0 && completedDays < challenge.duration;
     onStatsUpdate(challenge.id, { completed: isCompleted, active: isActive });
   }, [challenge.id, challenge.duration, completedDays, onStatsUpdate]);
+  [challenge.id, challenge.duration, completedDays, onStatsUpdate];
 
   return null;
 }
@@ -91,12 +93,12 @@ function ChallengeCard({ challenge, onClick }: { challenge: Challenge; onClick: 
   );
 }
 
-export default function Dashboard({ user, challenges, onCreateChallenge, onViewChallenge, onLogout }: DashboardProps) {
+export default function Dashboard({ user, challenges, onCreateChallenge, onViewChallenge, onViewJoinedChallenges, onLogout }: DashboardProps) {
   const [challengeStats, setChallengeStats] = useState<Record<string, { completed: boolean; active: boolean }>>({});
 
-  const handleStatsUpdate = (id: string, stats: { completed: boolean; active: boolean }) => {
+  const handleStatsUpdate = useCallback((id: string, stats: { completed: boolean; active: boolean }) => {
     setChallengeStats(prev => ({ ...prev, [id]: stats }));
-  };
+  }, []);
 
   const userChallenges = challenges.slice(0, 6);
   const totalChallenges = challenges.length;
@@ -201,13 +203,23 @@ export default function Dashboard({ user, challenges, onCreateChallenge, onViewC
 
           {/* Quick Actions */}
           <div className="mb-8">
-            <button
-              onClick={onCreateChallenge}
-              className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-semibold px-8 py-4 rounded-2xl shadow-xl transition-all transform hover:scale-105 flex items-center gap-3"
-            >
-              <Plus className="w-5 h-5" />
-              Crear nuevo reto
-            </button>
+            <div className="flex flex-wrap gap-4">
+              <button
+                onClick={onCreateChallenge}
+                className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-semibold px-8 py-4 rounded-2xl shadow-xl transition-all transform hover:scale-105 flex items-center gap-3"
+              >
+                <Plus className="w-5 h-5" />
+                Crear nuevo reto
+              </button>
+
+              <button
+                onClick={onViewJoinedChallenges}
+                className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold px-8 py-4 rounded-2xl shadow-xl transition-all transform hover:scale-105 flex items-center gap-3"
+              >
+                <Users className="w-5 h-5" />
+                Mis retos unidos
+              </button>
+            </div>
           </div>
 
           {/* My Challenges */}

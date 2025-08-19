@@ -1,4 +1,3 @@
-import React from 'react';
 import {
     Home,
     ListChecks,
@@ -7,8 +6,8 @@ import {
     Settings,
     LogOut,
     Target,
-    Menu,
-    X
+    X,
+    UserCheck
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -24,6 +23,7 @@ const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'my-challenges', label: 'Mis Retos', icon: ListChecks },
     { id: 'public-challenges', label: 'Retos Públicos', icon: Users },
+    { id: 'joined-challenges', label: 'Retos Unidos', icon: UserCheck },
     { id: 'profile', label: 'Perfil', icon: User },
     { id: 'settings', label: 'Configuración', icon: Settings },
 ];

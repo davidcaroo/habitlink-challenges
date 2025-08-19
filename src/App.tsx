@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Toaster } from 'react-hot-toast';
 import Landing from './components/Landing';
 import CreateChallenge from './components/CreateChallenge';
@@ -6,6 +6,7 @@ import ChallengeView from './components/ChallengeView';
 import Dashboard from './components/Dashboard';
 import MyChallenges from './components/MyChallenges';
 import PublicChallenges from './components/PublicChallenges';
+import JoinedChallenges from './components/JoinedChallenges';
 import Profile from './components/Profile';
 import Settings from './components/Settings';
 import Sidebar from './components/Sidebar';
@@ -16,7 +17,7 @@ import AnimatedBackground from './components/AnimatedBackground';
 import { AuthProvider, useAuthContext } from './contexts/AuthContext';
 import { useChallenges } from './hooks/useChallenges';
 
-type CurrentView = 'landing' | 'create' | 'challenge' | 'dashboard' | 'my-challenges' | 'public-challenges' | 'profile' | 'settings';
+type CurrentView = 'landing' | 'create' | 'challenge' | 'dashboard' | 'my-challenges' | 'public-challenges' | 'joined-challenges' | 'profile' | 'settings';
 
 function AppContent() {
   const [currentView, setCurrentView] = useState<CurrentView>('landing');
@@ -147,6 +148,7 @@ function AppContent() {
                 challenges={challenges}
                 onCreateChallenge={handleCreateChallenge}
                 onViewChallenge={handleViewChallenge}
+                onViewJoinedChallenges={() => handleNavigate('joined-challenges')}
                 onLogout={handleLogout}
               />
             )}
@@ -159,6 +161,8 @@ function AppContent() {
             )}
 
             {currentView === 'public-challenges' && <PublicChallenges />}
+
+            {currentView === 'joined-challenges' && <JoinedChallenges />}
 
             {currentView === 'profile' && <Profile />}
 
