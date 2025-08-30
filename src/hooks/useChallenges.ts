@@ -426,7 +426,7 @@ export function useChallenges() {
 
   // Get challenge progress for joined challenges
   const getChallengeProgress = useCallback(async (challengeId: string) => {
-    if (isAnonymous) return { userProgress: [], allProgress: [] };
+    if (isAnonymous) return { userProgress: [], allProgress: [], allParticipants: [] };
     
     try {
       // Get user's progress
@@ -439,7 +439,18 @@ export function useChallenges() {
       
       if (userError) {
         console.error('Error fetching user progress:', userError);
-        return { userProgress: [], allProgress: [] };
+        return { userProgress: [], allProgress: [], allParticipants: [] };
+      }
+      
+      // Get all participants of the challenge
+      const { data: participants, error: participantsError } = await supabase
+        .from('challenge_participants')
+        .select('user_id')
+        .eq('challenge_id', challengeId);
+      
+      if (participantsError) {
+        console.error('Error fetching participants:', participantsError);
+        return { userProgress: userProgress || [], allProgress: [], allParticipants: [] };
       }
       
       // Get all participants' progress for comparison
@@ -451,23 +462,25 @@ export function useChallenges() {
       
       if (allError) {
         console.error('Error fetching all progress:', allError);
-        return { userProgress: userProgress || [], allProgress: [] };
+        return { userProgress: userProgress || [], allProgress: [], allParticipants: participants || [] };
       }
       
       console.log('getChallengeProgress result:', {
         challengeId,
         userProgress: userProgress?.length || 0,
         allProgress: allProgress?.length || 0,
-        uniqueUsers: [...new Set(allProgress?.map(p => p.user_id) || [])]
+        totalParticipants: participants?.length || 0,
+        participantsWithProgress: [...new Set(allProgress?.map(p => p.user_id) || [])]
       });
       
       return {
         userProgress: userProgress || [],
-        allProgress: allProgress || []
+        allProgress: allProgress || [],
+        allParticipants: participants || []
       };
     } catch (error: any) {
       console.error('Unexpected error in getChallengeProgress:', error);
-      return { userProgress: [], allProgress: [] };
+      return { userProgress: [], allProgress: [], allParticipants: [] };
     }
   }, [isAnonymous, user?.id]);
 

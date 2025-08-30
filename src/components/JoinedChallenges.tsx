@@ -23,6 +23,7 @@ interface JoinedChallenge {
 interface ProgressData {
     userProgress: any[];
     allProgress: any[];
+    allParticipants: any[];
 }
 
 function JoinedChallengeCard({
@@ -44,28 +45,36 @@ function JoinedChallengeCard({
     const userCompletedDays = progressData.userProgress.filter(p => p.completed).length;
     const userProgressPercentage = Math.round((userCompletedDays / challenge.duration) * 100);
 
-    // Calculate real participant count and average progress
-    const uniqueParticipants = [...new Set(progressData.allProgress.map(p => p.user_id))];
-    const realParticipantCount = Math.max(uniqueParticipants.length, challenge.participants, 1);
-
-    const totalCompletedDays = progressData.allProgress.filter(p => p.completed).length;
-    const totalPossibleDays = realParticipantCount * challenge.duration;
-    const avgProgressPercentage = totalPossibleDays > 0
-        ? Math.round((totalCompletedDays / totalPossibleDays) * 100)
-        : 0;
+    // Calculate average progress of all participants (improved calculation)
+    // Use all registered participants, not just those with progress entries
+    const allParticipants = progressData.allParticipants?.map(p => p.user_id) ||
+        [...new Set(progressData.allProgress.map(p => p.user_id))];
 
     // Debug logs
-    console.log(`Challenge: ${challenge.name}`);
-    console.log(`Challenge.participants: ${challenge.participants}`);
-    console.log(`Unique participants from progress: ${uniqueParticipants.length}`);
-    console.log(`Real participant count: ${realParticipantCount}`);
-    console.log(`Duration: ${challenge.duration} days`);
-    console.log(`User completed days: ${userCompletedDays}/${challenge.duration} (${userProgressPercentage}%)`);
-    console.log(`Total completed days by all: ${totalCompletedDays}`);
-    console.log(`Total possible days: ${totalPossibleDays}`);
-    console.log(`Average progress: ${avgProgressPercentage}%`);
+    console.log('Progress Debug for challenge:', challenge.name);
     console.log('All progress entries:', progressData.allProgress);
-    console.log('Unique participants:', uniqueParticipants);
+    console.log('All registered participants:', progressData.allParticipants);
+    console.log('All participants found:', allParticipants);
+    console.log('Challenge participants count:', challenge.participants);
+
+    let avgProgressPercentage = 0;
+    if (allParticipants.length > 0) {
+        // Calculate individual progress for each participant
+        const participantProgresses = allParticipants.map(participantId => {
+            const participantEntries = progressData.allProgress.filter(p => p.user_id === participantId);
+            const completedDays = participantEntries.filter(p => p.completed).length;
+            const progressPercentage = (completedDays / challenge.duration) * 100;
+            console.log(`Participant ${participantId}: ${completedDays}/${challenge.duration} days (${progressPercentage}%)`);
+            return progressPercentage;
+        });
+
+        // Calculate average of individual progress percentages
+        const totalProgress = participantProgresses.reduce((sum, progress) => sum + progress, 0);
+        avgProgressPercentage = Math.round(totalProgress / allParticipants.length);
+        console.log('Average progress percentage:', avgProgressPercentage);
+    } else {
+        console.log('No participants found in progress data');
+    }
 
     const renderProgressDays = () => {
         const days = [];
@@ -142,7 +151,7 @@ function JoinedChallengeCard({
                             </div>
                             <div className="flex items-center gap-1">
                                 <Users className="w-4 h-4" />
-                                <span>{realParticipantCount} participantes</span>
+                                <span>{allParticipants.length} participantes</span>
                             </div>
                         </div>
                     </div>
@@ -165,7 +174,7 @@ function JoinedChallengeCard({
                 <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 text-center">
                     <div className="text-2xl font-bold text-blue-800">{avgProgressPercentage}%</div>
                     <div className="text-sm text-blue-600">Promedio grupal</div>
-                    <div className="text-xs text-blue-500">{realParticipantCount} participantes</div>
+                    <div className="text-xs text-blue-500">{allParticipants.length} participantes</div>
                 </div>
             </div>
 
